@@ -37,20 +37,22 @@ function RecordAnswerSection({ mockInterviewQuestion, activeQuestionIndex, inter
     ))
   }, [results]);
 
+  // Reset answer state when moving to a new question
+  useEffect(() => {
+    setUserAnswer('');
+    setResults([]);
+  }, [activeQuestionIndex]);
+
   useEffect(() => {
     if (!isRecording && userAnswer.length > 0) {
       UpdateUserAnswer();
     }
-
-  }, [userAnswer])
+  }, [userAnswer]);
 
   const StartStopRecording = async () => {
     if (isRecording) {
       console.log('Stopping recording...');
-
       stopSpeechToText();
-
-
     } else {
       console.log('Starting recording...');
       startSpeechToText();
@@ -64,37 +66,34 @@ function RecordAnswerSection({ mockInterviewQuestion, activeQuestionIndex, inter
       ",please give us rating for answer, correct answer and feedback as area for improvement if any " +
       "in just 3-5 lines to improve it in JSON format with rating field, correctAns field and feedback field";
 
-    const result = await chatSession.sendMessage(feedbackPrompt);
+    try {
+      const result = await chatSession.sendMessage(feedbackPrompt);
+      const rawResp = (result.response.text()).replace('```json', '').replace('```', '').trim();
+      const JsonFeedbackResp = JSON.parse(rawResp);
 
-    const rawResp = (result.response.text()).replace('```json', '').replace('```', '').trim();
-    const mockJsonResp = rawResp;
+      const resp = await db.insert(UserAnswer)
+        .values({
+          mockIdRef: interviewData?.mockId,
+          question: mockInterviewQuestion[activeQuestionIndex]?.question,
+          correctAns: mockInterviewQuestion[activeQuestionIndex]?.answer,
+          userAns: userAnswer,
+          feedback: JsonFeedbackResp?.feedback,
+          rating: JsonFeedbackResp?.rating,
+          userEmail: user?.user?.primaryEmailAddress?.emailAddress,
+          createdAt: moment().format('YYYY-MM-DD')
+        });
 
-    console.log(mockJsonResp);
-    const JsonFeedbackResp = JSON.parse(mockJsonResp);
-
-    const resp = await db.insert(UserAnswer)
-      .values({
-        mockIdRef: interviewData?.mockId,
-        question: mockInterviewQuestion[activeQuestionIndex]?.question,
-        correctAns: mockInterviewQuestion[activeQuestionIndex]?.answer,
-        userAns: userAnswer,
-        feedback: JsonFeedbackResp?.feedback,
-        rating: JsonFeedbackResp?.rating,
-        userEmail: user?.primaryEmailAddress?.emailAddress,
-        createdAt: moment().format('YYYY-MM-DD')
-
-      })
-
-    if (resp) {
-      toast("User Answer recorded successfully");
-      setUserAnswer('');
-      console.log(resp);
-      setResults([]);
+      if (resp) {
+        toast("User Answer recorded successfully");
+        setUserAnswer('');
+        setResults([]);
+      }
+    } catch (err) {
+      console.error("Error saving answer:", err);
+      toast("Failed to save answer. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setResults([]);
-    setLoading(false);
-
-
   }
 
   if (error) return <p>Web Speech API is not available in this browser 🤷‍. Please use another browser for interview.</p>;
