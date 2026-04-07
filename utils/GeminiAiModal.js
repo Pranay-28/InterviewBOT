@@ -1,44 +1,37 @@
-const {
-  GoogleGenerativeAI,
-  HarmCategory,
-  HarmBlockThreshold,
-} = require("@google/generative-ai");
+import Groq from "groq-sdk";
 
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey);
+const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
 
-const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+const groq = new Groq({
+  apiKey,
+  dangerouslyAllowBrowser: true,
 });
 
-const generationConfig = {
-  temperature: 1,
-  topP: 0.95,
-  topK: 64,
-  maxOutputTokens: 8192,
-  responseMimeType: "text/plain",
+const MODEL = "llama-3.3-70b-versatile";
+
+// Maintains a chat history for multi-turn conversations
+const history = [];
+
+export const chatSession = {
+  sendMessage: async (userMessage) => {
+    history.push({ role: "user", content: userMessage });
+
+    const completion = await groq.chat.completions.create({
+      messages: history,
+      model: MODEL,
+      temperature: 1,
+      max_tokens: 8192,
+    });
+
+    const assistantText = completion.choices[0]?.message?.content ?? "";
+
+    history.push({ role: "assistant", content: assistantText });
+
+    // Return a response object that matches the Gemini interface
+    return {
+      response: {
+        text: () => assistantText,
+      },
+    };
+  },
 };
-
-const safetySettings = [
-  {
-    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-    threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-  },
-];
-
-
- export const chatSession = model.startChat({
-    generationConfig,
-    safetySettings
- // safetySettings: Adjust safety settings
- // See https://ai.google.dev/gemini-api/docs/safety-settings
-   
-  });
-
-  
-
-  
